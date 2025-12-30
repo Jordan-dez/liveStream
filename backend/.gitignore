@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.aws-sam/
+.serverless/
+dynamodb/
+*.log
+.env
+.env.local
+env.json
+*.swp
+*.swo
+*~
+

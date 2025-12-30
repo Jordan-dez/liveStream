@@ -1,0 +1,263 @@
+service: livestream-backend
+
+frameworkVersion: '3'
+
+custom:
+  stage: ${opt:stage, 'dev'}
+  tables:
+    Users: ${self:service}-users-${self:custom.stage}
+    Concerts: ${self:service}-concerts-${self:custom.stage}
+    Purchases: ${self:service}-purchases-${self:custom.stage}
+    StreamTokens: ${self:service}-stream-tokens-${self:custom.stage}
+  dynamodb:
+    start:
+      migrate: true
+      port: 8000
+      inMemory: true
+      heapInitial: 200m
+      heapMax: 1g
+      sharedDb: true
+      seed: false
+    stages:
+      - dev
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: eu-west-1
+  memorySize: 512
+  timeout: 30
+  stage: ${self:custom.stage}
+  environment:
+    JWT_SECRET: ${env:JWT_SECRET, 'changez-moi-secret-jwt'}
+    JWT_EXPIRES_IN: ${env:JWT_EXPIRES_IN, '24h'}
+    STREAM_TOKEN_EXPIRES_IN: ${env:STREAM_TOKEN_EXPIRES_IN, '2h'}
+    STRIPE_SECRET_KEY: ${env:STRIPE_SECRET_KEY, 'sk_test_changez-moi'}
+    STRIPE_WEBHOOK_SECRET: ${env:STRIPE_WEBHOOK_SECRET, 'whsec_changez-moi'}
+    FRONTEND_URL: ${env:FRONTEND_URL, 'http://localhost:3000'}
+    CORS_ORIGIN: ${env:CORS_ORIGIN, '*'}
+    USERS_TABLE: ${self:custom.tables.Users}
+    CONCERTS_TABLE: ${self:custom.tables.Concerts}
+    PURCHASES_TABLE: ${self:custom.tables.Purchases}
+    STREAM_TOKENS_TABLE: ${self:custom.tables.StreamTokens}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource:
+            - 'arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.tables.Users}'
+            - 'arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.tables.Concerts}'
+            - 'arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.tables.Purchases}'
+            - 'arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.tables.StreamTokens}'
+            - 'arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.tables.Concerts}/index/*'
+            - 'arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.tables.Purchases}/index/*'
+
+plugins:
+  - serverless-offline
+  - serverless-dynamodb-local
+
+functions:
+  # Auth Functions
+  authLogin:
+    handler: dist/handlers/auth/login/index.handler
+    events:
+      - http:
+          path: auth/login
+          method: post
+          cors: true
+
+  authRegister:
+    handler: dist/handlers/auth/register/index.handler
+    events:
+      - http:
+          path: auth/register
+          method: post
+          cors: true
+
+  authRefresh:
+    handler: dist/handlers/auth/refresh/index.handler
+    events:
+      - http:
+          path: auth/refresh
+          method: post
+          cors: true
+
+  authVerify:
+    handler: dist/handlers/auth/verify/index.handler
+    events:
+      - http:
+          path: auth/verify
+          method: get
+          cors: true
+
+  # Concert Functions
+  concertsList:
+    handler: dist/handlers/concerts/list/index.handler
+    events:
+      - http:
+          path: concerts
+          method: get
+          cors: true
+
+  concertsGet:
+    handler: dist/handlers/concerts/get/index.handler
+    events:
+      - http:
+          path: concerts/{concertId}
+          method: get
+          cors: true
+
+  concertsCreate:
+    handler: dist/handlers/concerts/create/index.handler
+    events:
+      - http:
+          path: concerts
+          method: post
+          cors: true
+
+  # Payment Functions
+  paymentCreateCheckout:
+    handler: dist/handlers/payment/create-checkout/index.handler
+    events:
+      - http:
+          path: payment/create-checkout
+          method: post
+          cors: true
+
+  paymentWebhook:
+    handler: dist/handlers/payment/webhook/index.handler
+    events:
+      - http:
+          path: payment/webhook
+          method: post
+          cors: true
+
+  paymentVerify:
+    handler: dist/handlers/payment/verify/index.handler
+    events:
+      - http:
+          path: payment/verify
+          method: post
+          cors: true
+
+  # Stream Functions
+  streamAccess:
+    handler: dist/handlers/stream/access/index.handler
+    events:
+      - http:
+          path: stream/access
+          method: post
+          cors: true
+
+  streamEmbedUrl:
+    handler: dist/handlers/stream/embed-url/index.handler
+    events:
+      - http:
+          path: stream/embed-url
+          method: get
+          cors: true
+
+  streamValidate:
+    handler: dist/handlers/stream/validate/index.handler
+    events:
+      - http:
+          path: stream/validate
+          method: get
+          cors: true
+
+resources:
+  Resources:
+    UsersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.tables.Users}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+
+    ConcertsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.tables.Concerts}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: concertId
+            AttributeType: S
+          - AttributeName: status
+            AttributeType: S
+          - AttributeName: scheduledDate
+            AttributeType: S
+        KeySchema:
+          - AttributeName: concertId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: status-date-index
+            KeySchema:
+              - AttributeName: status
+                KeyType: HASH
+              - AttributeName: scheduledDate
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
+    PurchasesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.tables.Purchases}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: purchaseId
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: purchaseDate
+            AttributeType: S
+          - AttributeName: concertId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: purchaseId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: user-concerts-index
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+              - AttributeName: purchaseDate
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: concert-purchases-index
+            KeySchema:
+              - AttributeName: concertId
+                KeyType: HASH
+              - AttributeName: purchaseDate
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
+    StreamTokensTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.tables.StreamTokens}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: tokenId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: tokenId
+            KeyType: HASH
+        TimeToLiveSpecification:
+          AttributeName: expiresAt
+          Enabled: true
+
