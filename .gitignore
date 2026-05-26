@@ -1,0 +1,5 @@
+./*.md
+./frontend/node_modules
+./backend/node_modules
+.DS_Store
+backend/.DS_Store

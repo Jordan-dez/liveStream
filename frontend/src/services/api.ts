@@ -47,12 +47,12 @@ export const apiClient = {
   },
 
   post: async <T>(url: string, data?: any): Promise<T|any> => {
-    return new Promise((resolve) => {
+    /*return new Promise((resolve) => {
       resolve({
       success: true,
         data: data as T,
       } as any);
-    });
+    });*/
     const response = await api.post<ApiResponse<T>>(url, data);
     if (!response.data.success) {
       throw new Error(response.data.error);

@@ -18,21 +18,7 @@ export const handler = async (
     if (event.httpMethod !== 'POST') {
       return errorResponse('Method not allowed', 405);
     }
- // Générer le token JWT
- const token2 = generateToken({
-  userId: '123',
-  email: 'test@test.com',
-  role: 'user',
-});
 
-return successResponse({
-  token2,
-  user: {
-    userId: '123',
-    email: 'test@test.com',
-    role: 'user',
-  },
-});
     const body: LoginRequest = JSON.parse(event.body || '{}');
     
     // Validation
@@ -50,7 +36,7 @@ return successResponse({
     }
 
     // Vérifier le mot de passe
-    const isPasswordValid = await comparePassword(body.password, user.passwordHash);
+    const isPasswordValid = await comparePassword(body.password, user?.passwordHash);
     if (!isPasswordValid) {
       return unauthorizedResponse('Invalid email or password');
     }
